@@ -63,7 +63,7 @@ public class AMQCacheReplicator implements CacheReplicator {
 			try {
 				peer.send(Arrays.asList(message));
 			} catch (RemoteException e) {
-				e.printStackTrace();
+                e.printStackTrace();
 			}
 		}
 	}
@@ -93,7 +93,7 @@ public class AMQCacheReplicator implements CacheReplicator {
      * Called immediately after an element is <i>found</i> to be expired. The
      * {@link net.sf.ehcache.Cache#remove(Object)} method will block until this method returns.
      * <p/>
-     * As the {@link Element} has been expired, only what was the key of the element is known.
+     * As the {@link net.sf.ehcache.Element} has been expired, only what was the key of the element is known.
      * <p/>
      * Elements are checked for expiry in ehcache at the following times:
      * <ul>

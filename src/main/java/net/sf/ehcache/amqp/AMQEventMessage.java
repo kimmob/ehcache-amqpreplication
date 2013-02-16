@@ -23,6 +23,7 @@ import net.sf.ehcache.CacheException;
 import net.sf.ehcache.Element;
 import net.sf.ehcache.distribution.EventMessage;
 
+import net.sf.ehcache.distribution.LegacyEventMessage;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 
 /**
@@ -30,39 +31,44 @@ import org.apache.commons.io.output.ByteArrayOutputStream;
  *
  * @author James R. Carr <james.r.carr@gmail.com>
  */
-public class AMQEventMessage extends EventMessage{
-	private static final long serialVersionUID = 1L;
-	private String routingKey;
-	private final String cacheName;
+public class AMQEventMessage extends LegacyEventMessage {
+    private static final long serialVersionUID = 1L;
+    private String routingKey;
+    private final String cacheName;
+    private final String cacheGuid;
 
-	public AMQEventMessage(int event, Serializable key, Element element, String cacheName) {
-		super(event, key, element);
-		this.cacheName = cacheName;
-		routingKey = "ehcache.replicate";
-	}
-	
-
-	public String getCacheName() {
-		return cacheName;
-	}
+    public AMQEventMessage(int event, Serializable key, Element element, String cacheName, String cacheGuid) {
+        super(event, key, element);
+        this.cacheName = cacheName;
+        this.cacheGuid = cacheGuid;
+        routingKey = "ehcache.replicate";
+    }
 
 
-	public String getRoutingKey() {
-		return routingKey;
-	}
+    public String getCacheName() {
+        return cacheName;
+    }
 
-	public byte[] toBytes() {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		try {
-			ObjectOutputStream out = new ObjectOutputStream(baos);
-			out.writeObject(this);
-		} catch (IOException e) {
-			throw new CacheException(e);
-		}
-		return baos.toByteArray();
-	}
+    public String getCacheGuid() {
+        return this.cacheGuid;
+    }
 
-	
+    public String getRoutingKey() {
+        return routingKey;
+    }
+
+    public byte[] toBytes() {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            ObjectOutputStream out = new ObjectOutputStream(baos);
+            out.writeObject(this);
+        } catch (IOException e) {
+            throw new CacheException(e);
+        }
+        return baos.toByteArray();
+    }
+
+
 
 
 

@@ -15,9 +15,9 @@
  */
 package net.sf.ehcache.amqp;
 
-import static net.sf.ehcache.distribution.EventMessage.PUT;
-import static net.sf.ehcache.distribution.EventMessage.REMOVE;
-import static net.sf.ehcache.distribution.EventMessage.REMOVE_ALL;
+import static net.sf.ehcache.distribution.LegacyEventMessage.PUT;
+import static net.sf.ehcache.distribution.LegacyEventMessage.REMOVE;
+import static net.sf.ehcache.distribution.LegacyEventMessage.REMOVE_ALL;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -36,137 +36,163 @@ import org.slf4j.LoggerFactory;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.ChannelAwareMessageListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 /**
  * Description Here.
  *
  * @author James R. Carr <james.r.carr@gmail.com>
  */
-public class AMQCachePeer extends DefaultConsumer implements CachePeer {
-	private static final String MESSAGE_TYPE_NAME = AMQEventMessage.class.getName();
-	private static final Logger LOG = LoggerFactory.getLogger(AMQCachePeer.class);
-	private final Channel channel;
-	private final CacheManager cacheManager;
-	private final String exchangeName;
+public class AMQCachePeer implements CachePeer, ChannelAwareMessageListener {
+    private static final String MESSAGE_TYPE_NAME = AMQEventMessage.class.getName();
+    private static final Logger LOG = LoggerFactory.getLogger(AMQCachePeer.class);
 
-	public AMQCachePeer(Channel channel, CacheManager cacheManager, String exchangeName) {
-		super(channel);
-		this.channel = channel;
-		this.cacheManager = cacheManager;
-		this.exchangeName = exchangeName;
-	}
+    private final RabbitTemplate rabbitTemplate;
 
-	public void put(Element element) throws IllegalArgumentException,
-			IllegalStateException, RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+    private final CacheManager cacheManager;
+    private final String exchangeName;
 
-	public boolean remove(Serializable key) throws IllegalStateException,
-			RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+    public AMQCachePeer(RabbitTemplate rabbitTemplate, CacheManager cacheManager, String exchangeName) {
+        this.rabbitTemplate = rabbitTemplate;
+        this.cacheManager = cacheManager;
+        this.exchangeName = exchangeName;
+    }
 
-	public void removeAll() throws RemoteException, IllegalStateException {
-		 throw new RemoteException("Not implemented for AMQP");
-		
-	}
+    public void put(Element element) throws IllegalArgumentException,
+            IllegalStateException, RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
 
-	public void send(List eventMessages) throws RemoteException {
-		AMQEventMessage message = (AMQEventMessage) eventMessages.get(0);
-		BasicProperties basicProperties = new BasicProperties();
-		basicProperties.setContentType("application/x-java-serialized-object");
-		basicProperties.setType(AMQEventMessage.class.getName());
-		try {
-			LOG.info("Publishing elment with key " + message.getElement() +" with event of " + message.getEvent());
-			channel.basicPublish(exchangeName, message.getRoutingKey(),
-					basicProperties, message.toBytes());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-	}
+    public boolean remove(Serializable key) throws IllegalStateException,
+            RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
 
-	public String getName() throws RemoteException {
-		return cacheManager.getName() + " AMQCachePeer";
-	}
+    public void removeAll() throws RemoteException, IllegalStateException {
+        throw new RemoteException("Not implemented for AMQP");
 
-	public String getGuid() throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+    }
 
-	public String getUrl() throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+    public void send(List eventMessages) throws RemoteException {
+        AMQEventMessage ourMessage = (AMQEventMessage) eventMessages.get(0);
+        MessageProperties basicProperties = new MessageProperties();
+        basicProperties.setContentType("application/x-java-serialized-object");
+        basicProperties.setType(AMQEventMessage.class.getName());
 
-	public String getUrlBase() throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+        if (LOG.isDebugEnabled()) {
+            LOG.info("Publishing element with key " + ourMessage.getElement() + " with event of " + ourMessage
+                    .getEvent
+                            () + " on cache: " + ourMessage.getCacheName());
+        }
 
-	public List<?> getKeys() throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+        Message message = new Message(ourMessage.toBytes(), basicProperties);
 
-	public Element getQuiet(Serializable key) throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
+        rabbitTemplate.send(exchangeName, ourMessage.getRoutingKey(), message);
 
-	public List getElements(List keys) throws RemoteException {
-		throw new RemoteException("Not implemented for AMQP");
-	}
-	
-	@Override
-	public void handleDelivery(String consumerTag, Envelope envelope,
-			BasicProperties properties, byte[] body) throws IOException {
-		if(MESSAGE_TYPE_NAME.equals(properties.getType())){
-			AMQEventMessage message = readMessageIn(body);
-			LOG.info("Received cache update " + message.getEvent() +" with element " + message.getElement() );
-			Cache cache = cacheManager.getCache(message.getCacheName());
-			if(cache==null){
-				handleMissingCache(message.getCacheName());
-			}
-			else{
-				handleCacheEvent(message, cache);
-			}
-		}else{
-			LOG.warn("Received non cache message of unknown type");
-		}
-		
-	}
+    }
 
-	private void handleMissingCache(String cacheName) {
-		LOG.warn("Recieved replication update for cache not present: " + cacheName+". This could me the cache no longer exists.");
-	}
+    public String getName() throws RemoteException {
+        return cacheManager.getName() + " AMQCachePeer";
+    }
 
-	private void handleCacheEvent(AMQEventMessage message, Cache cache) {
-		switch (message.getEvent()) {
-			case PUT:
-				cache.put(message.getElement(), true);				
-				break;
-			case REMOVE:
-				cache.remove(message.getElement().getKey(), true);
-				break;		
-			case REMOVE_ALL:
-				cache.removeAll(true);
-				break;
-			default:
-				LOG.warn("Don't understand how to handle event of type " + message.getEvent());
-				break;
-		}
-	}
+    public String getGuid() throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
 
-	private AMQEventMessage readMessageIn(byte[] body) throws IOException {
-		ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(
-				body));
-		Object o = null;
-		try {
-			o = in.readObject();
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		}
-		return (AMQEventMessage) o;
-	}
+    public String getUrl() throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
+
+    public String getUrlBase() throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
+
+    public List<?> getKeys() throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
+
+    public Element getQuiet(Serializable key) throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
+
+    public List getElements(List keys) throws RemoteException {
+        throw new RemoteException("Not implemented for AMQP");
+    }
+
+    public void handleDelivery(String consumerTag, Envelope envelope,
+                               BasicProperties properties, byte[] body) throws IOException {
+
+
+    }
+
+    private void handleMissingCache(String cacheName) {
+        LOG.warn("Recieved replication update for cache not present: " + cacheName + ". This could me the cache no " +
+                "longer exists.");
+    }
+
+    private void handleCacheEvent(AMQEventMessage message, Cache cache) {
+        switch (message.getEvent()) {
+            case PUT:
+                cache.put(message.getElement(), true);
+                break;
+            case REMOVE:
+                cache.remove(message.getElement().getKey(), true);
+                break;
+            case REMOVE_ALL:
+                cache.removeAll(true);
+                break;
+            default:
+                LOG.warn("Don't understand how to handle event of type " + message.getEvent());
+                break;
+        }
+    }
+
+    private AMQEventMessage readMessageIn(byte[] body) throws IOException {
+        ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(
+                body));
+        Object o = null;
+        try {
+            o = in.readObject();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return (AMQEventMessage) o;
+    }
+
+
+    public void onMessage(Message message, Channel channel) throws Exception {
+
+        if (MESSAGE_TYPE_NAME.equals(message.getMessageProperties().getType())) {
+
+            AMQEventMessage ourMessage = readMessageIn(message.getBody());
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Received cache update " + ourMessage.getEvent() + " with element " + ourMessage.getElement
+                        ());
+            }
+            Cache cache = cacheManager.getCache(ourMessage.getCacheName());
+            if (cache == null) {
+                handleMissingCache(ourMessage.getCacheName());
+            } else if (!cache.getGuid().equals(ourMessage.getCacheGuid())) {
+                // only handle the events that were published by other peers
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Cache=" + cache.getName() + " (" + cache.getGuid() + ") is handling event " + ourMessage
+                            .getEvent()
+                            + " from peer=" + ourMessage.getCacheGuid());
+                }
+                handleCacheEvent(ourMessage, cache);
+            }
+        } else {
+            LOG.warn("Received non cache message of unknown type");
+        }
+
+    }
 
 
 }
+
+
