@@ -49,6 +49,9 @@ public class AMQCacheManagerPeerProvider implements CacheManagerPeerProvider {
     private final AMQCachePeer amqCachePeer;
     private final List<CachePeer> cachePeers;
 
+    private SimpleMessageListenerContainer container;
+
+
     public AMQCacheManagerPeerProvider(RabbitTemplate rabbitTemplate, RabbitAdmin rabbitAdmin, CacheManager cacheManager, String exchangeName) {
         this.rabbitTemplate = rabbitTemplate;
         this.rabbitAdmin = rabbitAdmin;
@@ -93,6 +96,8 @@ public class AMQCacheManagerPeerProvider implements CacheManagerPeerProvider {
         container.setQueues(queue);
         container.start();
 
+        this.container = container;
+
         LOG.info("Binding queue " + queue.getName() + " to exchange " + exchangeName + " on key ehcache.replicate");
     }
 
@@ -103,7 +108,9 @@ public class AMQCacheManagerPeerProvider implements CacheManagerPeerProvider {
      * @throws net.sf.ehcache.CacheException
      */
     public void dispose() throws CacheException {
-        LOG.info("disposing of provider and closing amqp channel.");
+
+        LOG.info("disposing of provider");
+        container.stop();
     }
 
     /**

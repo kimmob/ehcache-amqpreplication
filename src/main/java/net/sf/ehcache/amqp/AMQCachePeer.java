@@ -84,7 +84,7 @@ public class AMQCachePeer implements CachePeer, ChannelAwareMessageListener {
         basicProperties.setType(AMQEventMessage.class.getName());
 
         if (LOG.isDebugEnabled()) {
-            LOG.info("Publishing element with key " + ourMessage.getElement() + " with event of " + ourMessage
+            LOG.info("Publishing element with key " + ourMessage.getSerializableKey() + " with event of " + ourMessage
                     .getEvent
                             () + " on cache: " + ourMessage.getCacheName());
         }
@@ -174,16 +174,19 @@ public class AMQCachePeer implements CachePeer, ChannelAwareMessageListener {
                 LOG.debug("Received cache update " + ourMessage.getEvent() + " with element " + ourMessage.getElement
                         ());
             }
+
             Cache cache = cacheManager.getCache(ourMessage.getCacheName());
             if (cache == null) {
                 handleMissingCache(ourMessage.getCacheName());
             } else if (!cache.getGuid().equals(ourMessage.getCacheGuid())) {
                 // only handle the events that were published by other peers
+
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Cache=" + cache.getName() + " (" + cache.getGuid() + ") is handling event " + ourMessage
-                            .getEvent()
-                            + " from peer=" + ourMessage.getCacheGuid());
+                    LOG.info("Cache-message for element with key " + ourMessage.getSerializableKey() + " with event of " + ourMessage
+                            .getEvent
+                                    () + " on cache: " + ourMessage.getCacheName() + " from peer=" + ourMessage.getCacheGuid());
                 }
+
                 handleCacheEvent(ourMessage, cache);
             }
         } else {
